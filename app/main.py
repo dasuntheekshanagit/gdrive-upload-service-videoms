@@ -1,7 +1,11 @@
-from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException
+from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException, File, UploadFile, Form
 from sqlalchemy.orm import Session
 import uuid
 from datetime import datetime
+from typing import Optional
+import json
+import os
+import boto3
 
 from .models import VideoMetadata, VideoMetadataResolution, SessionLocal, engine, Base
 from .schemas import GDriveUploadRequest, VideoMetadataDto
@@ -32,28 +36,60 @@ def get_db():
 
 @app.post("/api/gdrive-upload", response_model=VideoMetadataDto)
 def upload_from_gdrive(
-    request: GDriveUploadRequest, 
-    background_tasks: BackgroundTasks, 
+    background_tasks: BackgroundTasks,
+    request: str = Form(...),
+    thumbnail: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db)
 ):
-    # 1. Create VideoMetadata record
+    # Parse request JSON string
+    try:
+        request_data = json.loads(request)
+        req = GDriveUploadRequest(**request_data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request payload: {str(e)}")
+
     video_id = str(uuid.uuid4())
+    
+    # Upload thumbnail to S3 if provided
+    thumbnail_url_path = None
+    if thumbnail:
+        try:
+            AWS_REGION = os.getenv("AWS_REGION", "eu-north-1")
+            S3_OUTPUT_BUCKET = os.getenv("S3_OUTPUT_BUCKET", "videoms-output-bucket")
+            s3_client = boto3.client('s3', region_name=AWS_REGION)
+            
+            # Clean filename and build key: thumbnails/video/{video_id}_{filename}
+            clean_filename = "".join([c for c in thumbnail.filename if c.isalnum() or c in ['.', '_', '-']]).strip()
+            thumbnail_key = f"thumbnails/video/{video_id}_{clean_filename}"
+            
+            s3_client.upload_fileobj(
+                thumbnail.file,
+                S3_OUTPUT_BUCKET,
+                thumbnail_key,
+                ExtraArgs={"ContentType": thumbnail.content_type or "image/jpeg"}
+            )
+            thumbnail_url_path = thumbnail_key
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to upload thumbnail: {str(e)}")
+
+    # 1. Create VideoMetadata record
     video = VideoMetadata(
         id=video_id,
-        user_id=request.userId,
-        user_email=request.email,
-        original_file_name=request.originalFileName,
-        description=request.description,
-        duration=request.duration,
+        user_id=req.userId,
+        user_email=req.email,
+        original_file_name=req.originalFileName,
+        description=req.description,
+        duration=req.duration,
         status="TRANSFERRING_TO_S3",
-        folder_id=request.folderId,
+        folder_id=req.folderId,
         is_hidden=True,
+        thumbnail_url=thumbnail_url_path,
         upload_time=datetime.utcnow()
     )
     db.add(video)
     
     # 2. Add resolutions
-    for res in request.resolutions:
+    for res in req.resolutions:
         resolution = VideoMetadataResolution(video_metadata_id=video_id, resolutions=res)
         db.add(resolution)
     
@@ -61,7 +97,7 @@ def upload_from_gdrive(
     db.refresh(video)
 
     # 3. Trigger Background Task
-    background_tasks.add_task(process_gdrive_upload, video_id, request.dict())
+    background_tasks.add_task(process_gdrive_upload, video_id, req.dict())
 
     return video
 
