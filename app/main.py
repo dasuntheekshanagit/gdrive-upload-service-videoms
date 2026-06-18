@@ -7,10 +7,20 @@ from .models import VideoMetadata, VideoMetadataResolution, SessionLocal, engine
 from .schemas import GDriveUploadRequest, VideoMetadataDto
 from .tasks import process_gdrive_upload
 
+from fastapi.middleware.cors import CORSMiddleware
+
 # Create tables if they don't exist (though they should exist from Spring Boot)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="GDrive Upload Service")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Dependency to get DB session
 def get_db():
