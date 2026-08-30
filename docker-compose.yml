@@ -6,11 +6,12 @@ services:
     ports:
       - "8001:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:rbZZdeNhhmTzQt1YiMpl@video-ms-db-i-1.c9ka6ysskyi9.eu-north-1.rds.amazonaws.com:5432/video_ms_db
-      - AWS_REGION=eu-north-1
-      - S3_INPUT_BUCKET=videoms-input-bucket
-      - SQS_QUEUE_URL=https://sqs.eu-north-1.amazonaws.com/637423445599/video-ms-convert.fifo
-      - EC2_INSTANCE_ID=i-03a1d1cb5ad9dece8
+      - DATABASE_URL=${DATABASE_URL}
+      - AWS_REGION=${AWS_REGION}
+      - S3_INPUT_BUCKET=${S3_INPUT_BUCKET}
+      - SQS_QUEUE_URL=${SQS_QUEUE_URL}
+      - EC2_INSTANCE_ID=${EC2_INSTANCE_ID}
+      - YOUTUBE_UPLOAD_SERVICE_URL=${YOUTUBE_UPLOAD_SERVICE_URL}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
     volumes:

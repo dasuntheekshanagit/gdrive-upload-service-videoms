@@ -11,6 +11,7 @@ class GDriveUploadRequest(BaseModel):
     duration: Optional[int] = None
     resolutions: List[str] = []
     segmentDuration: Optional[int] = 10
+    uploadToYouTube: Optional[bool] = False
 
 class VideoMetadataDto(BaseModel):
     id: str
@@ -23,6 +24,10 @@ class VideoMetadataDto(BaseModel):
     s3Key: Optional[str] = Field(None, alias="s3key")
     status: Optional[str]
     isHidden: bool = Field(..., alias="is_hidden")
+    isInYoutube: bool = Field(False, alias="is_in_youtube")
+    youtubeVideoId: Optional[str] = Field(None, alias="youtube_video_id")
+    youtubePrivacyStatus: Optional[str] = Field(None, alias="youtube_privacy_status")
+    youtubeUrl: Optional[str] = Field(None, alias="youtube_url")
     folderId: Optional[str] = Field(None, alias="folder_id")
     resolutions: List[str] = []
 

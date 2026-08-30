@@ -28,6 +28,10 @@ class VideoMetadata(Base):
     s3key = Column(String)
     status = Column(String) # UPLOADED, PROCESSING, COMPLETED, FAILED, TRANSFERRING_TO_S3
     is_hidden = Column(Boolean, default=True)
+    is_in_youtube = Column(Boolean, default=False)
+    youtube_video_id = Column(String)
+    youtube_privacy_status = Column(String)
+    youtube_url = Column(String)
     folder_id = Column(String, ForeignKey('folders.id'))
     outputs3key = Column(String)
     encryption_keys3path = Column(String)
@@ -46,6 +50,8 @@ class VideoMetadataResolution(Base):
     video_metadata = relationship("VideoMetadata", back_populates="resolutions")
 
 # Database connection
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:rbZZdeNhhmTzQt1YiMpl@video-ms-db-i-1.c9ka6ysskyi9.eu-north-1.rds.amazonaws.com:5432/video_ms_db")
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL must be set in environment variables.")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -17,6 +17,11 @@ S3_INPUT_BUCKET = os.getenv("S3_INPUT_BUCKET", "videoms-input-bucket")
 SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL", "https://sqs.eu-north-1.amazonaws.com/637423445599/video-ms-convert.fifo")
 EC2_INSTANCE_ID = os.getenv("EC2_INSTANCE_ID", "i-03a1d1cb5ad9dece8")
 
+import requests
+
+# YouTube Upload Service Configuration
+YOUTUBE_UPLOAD_SERVICE_URL = os.getenv("YOUTUBE_UPLOAD_SERVICE_URL", "http://localhost:8002")
+
 sqs_client = boto3.client('sqs', region_name=AWS_REGION)
 ec2_client = boto3.client('ec2', region_name=AWS_REGION)
 
@@ -43,6 +48,7 @@ def run_rclone_transfer(gdrive_id: str, s3_key: str):
 
 def process_gdrive_upload(video_id: str, request_data: dict):
     db: Session = SessionLocal()
+    video = None
     try:
         video = db.query(VideoMetadata).filter(VideoMetadata.id == video_id).first()
         if not video:
@@ -65,36 +71,56 @@ def process_gdrive_upload(video_id: str, request_data: dict):
         # 2. Run Rclone
         run_rclone_transfer(gdrive_id, s3_key)
 
-        # 3. Update Status
-        video.status = "UPLOADED"
-        db.commit()
+        # 3. Check upload destination
+        upload_to_youtube = request_data.get('uploadToYouTube', False)
 
-        # 4. Send SQS Message
-        message_body = {
-            "videoId": video.id,
-            "s3Key": s3_key,
-            "bucket": S3_INPUT_BUCKET,
-            "folderPath": folder_path,
-            "fileName": video.original_file_name,
-            "resolutions": ",".join([r.resolutions for r in video.resolutions]),
-            "segmentDuration": request_data.get('segmentDuration', 10)
-        }
-        
-        sqs_params = {
-            'QueueUrl': SQS_QUEUE_URL,
-            'MessageBody': json.dumps(message_body)
-        }
-        
-        if SQS_QUEUE_URL.endswith(".fifo"):
-            sqs_params['MessageGroupId'] = video.id
-            sqs_params['MessageDeduplicationId'] = video.id
+        if upload_to_youtube:
+            video.status = "QUEUED_FOR_YOUTUBE"
+            db.commit()
             
-        sqs_client.send_message(**sqs_params)
-        logger.info(f"SQS message sent for video {video_id}")
+            yt_url = f"{YOUTUBE_UPLOAD_SERVICE_URL}/api/youtube-upload/process/{video.id}"
+            payload = {
+                "videoId": video.id,
+                "title": video.original_file_name,
+                "description": video.description,
+                "privacyStatus": "private"
+            }
+            logger.info(f"Triggering YouTube Upload Service at {yt_url} for video {video_id}")
+            try:
+                resp = requests.post(yt_url, json=payload, timeout=10)
+                logger.info(f"YouTube Upload Service response: {resp.status_code} - {resp.text}")
+            except Exception as yt_err:
+                logger.error(f"Failed to trigger YouTube service: {yt_err}")
+        else:
+            # 4. Standard FFmpeg conversion path: Update Status & Send SQS Message
+            video.status = "UPLOADED"
+            db.commit()
 
-        # 5. Start EC2 Instance
-        logger.info(f"Starting EC2 instance {EC2_INSTANCE_ID}")
-        ec2_client.start_instances(InstanceIds=[EC2_INSTANCE_ID])
+            message_body = {
+                "videoId": video.id,
+                "s3Key": s3_key,
+                "bucket": S3_INPUT_BUCKET,
+                "folderPath": folder_path,
+                "fileName": video.original_file_name,
+                "resolutions": ",".join([r.resolutions for r in video.resolutions]),
+                "segmentDuration": request_data.get('segmentDuration', 10)
+            }
+            
+            sqs_params = {
+                'QueueUrl': SQS_QUEUE_URL,
+                'MessageBody': json.dumps(message_body)
+            }
+            
+            if SQS_QUEUE_URL.endswith(".fifo"):
+                sqs_params['MessageGroupId'] = video.id
+                sqs_params['MessageDeduplicationId'] = video.id
+                
+            sqs_client.send_message(**sqs_params)
+            logger.info(f"SQS message sent for video {video_id}")
+
+            # 5. Start EC2 Instance
+            logger.info(f"Starting EC2 instance {EC2_INSTANCE_ID}")
+            ec2_client.start_instances(InstanceIds=[EC2_INSTANCE_ID])
 
     except Exception as e:
         logger.error(f"Error processing upload for {video_id}: {str(e)}")
