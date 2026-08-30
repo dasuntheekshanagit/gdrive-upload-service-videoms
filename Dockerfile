@@ -15,6 +15,6 @@ COPY . .
 # Create a placeholder for rclone config
 RUN mkdir -p /root/.config/rclone && touch /root/.config/rclone/rclone.conf
 
-EXPOSE 8000
+EXPOSE 8001
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
