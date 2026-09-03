@@ -5,10 +5,13 @@ import boto3
 import os
 from sqlalchemy.orm import Session
 from .models import VideoMetadata, VideoMetadataResolution, Folder, SessionLocal
-from .schemas import GDriveUploadRequest
 import logging
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s.%(msecs)03d %(levelname)5s --- [%(threadName)15s] %(name)-25s : %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 logger = logging.getLogger(__name__)
 
 # AWS Configuration

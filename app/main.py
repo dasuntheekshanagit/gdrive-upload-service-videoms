@@ -12,6 +12,14 @@ from .schemas import GDriveUploadRequest, VideoMetadataDto
 from .tasks import process_gdrive_upload
 
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s.%(msecs)03d %(levelname)5s --- [%(threadName)15s] %(name)-25s : %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger(__name__)
 
 # Create tables if they don't exist (though they should exist from Spring Boot)
 Base.metadata.create_all(bind=engine)

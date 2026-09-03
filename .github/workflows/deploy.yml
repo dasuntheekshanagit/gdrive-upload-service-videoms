@@ -1,0 +1,98 @@
+name: Deploy GDrive Upload Service to EC2
+
+on:
+  push:
+    branches:
+      - develop
+      # - master # Uncomment when ready for production deployment
+  workflow_dispatch:
+
+jobs:
+  # =========================================================================
+  # DEV DEPLOYMENT (Triggers on push to develop branch)
+  # =========================================================================
+  deploy-dev:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to Dev EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_DEV_HOST }}
+          username: ${{ secrets.EC2_DEV_USER }}
+          key: ${{ secrets.EC2_DEV_SSH_KEY }}
+          port: ${{ secrets.EC2_DEV_PORT || 22 }}
+          script: |
+            set -e  # Exit immediately if a command exits with a non-zero status
+
+            # Resolve home directory path cleanly
+            APP_DIR="${{ secrets.EC2_GDRIVE_DEV_APP_DIR || '$HOME/apps/gdrive-upload-service-videoms' }}"
+            APP_DIR="${APP_DIR/\~/$HOME}"  # Expand tilde if present
+
+            echo "Target application directory: $APP_DIR"
+
+            # Check if directory exists, if not create and clone using GITHUB_TOKEN
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo "Repository not found at $APP_DIR. Cloning repository..."
+              mkdir -p "$(dirname "$APP_DIR")"
+              git clone -b ${{ github.ref_name }} https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+
+            # Ensure remote origin is authenticated for private repo access
+            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+            # Pull latest changes from the branch that triggered this workflow
+            echo "Fetching latest changes from ${{ github.ref_name }}..."
+            git fetch origin ${{ github.ref_name }}
+            git reset --hard origin/${{ github.ref_name }}
+
+            # Build and restart containers using Docker Compose
+            echo "Rebuilding and restarting containers..."
+            docker compose down
+            docker compose up -d --build
+
+            # Clean up dangling images
+            echo "Cleaning up dangling images..."
+            docker image prune -f
+
+            echo "Deployment to Dev completed successfully!"
+
+  # =========================================================================
+  # PROD DEPLOYMENT (Triggers on push to master branch) - COMMENTED OUT FOR NOW
+  # =========================================================================
+  # deploy-prod:
+  #   if: github.ref == 'refs/heads/master'
+  #   runs-on: ubuntu-latest
+  #
+  #   steps:
+  #     - name: Deploy to Prod EC2 via SSH
+  #       uses: appleboy/ssh-action@v1.0.3
+  #       with:
+  #         host: ${{ secrets.EC2_PROD_HOST }}
+  #         username: ${{ secrets.EC2_PROD_USER }}
+  #         key: ${{ secrets.EC2_PROD_SSH_KEY }}
+  #         port: ${{ secrets.EC2_PROD_PORT || 22 }}
+  #         script: |
+  #           # Navigate to the production project directory on EC2
+  #           APP_DIR="${{ secrets.EC2_GDRIVE_PROD_APP_DIR || '$HOME/apps/gdrive-upload-service-videoms' }}"
+  #           APP_DIR="${APP_DIR/\~/$HOME}"
+  #           echo "Navigating to $APP_DIR..."
+  #           cd $APP_DIR
+  #
+  #           # Pull latest changes from master branch
+  #           echo "Fetching latest changes from master..."
+  #           git fetch origin master
+  #           git reset --hard origin/master
+  #
+  #           # Build and restart containers using Docker Compose
+  #           echo "Rebuilding and restarting containers..."
+  #           docker compose down
+  #           docker compose up -d --build
+  #
+  #           # Clean up dangling images
+  #           echo "Cleaning up dangling images..."
+  #           docker image prune -f
+  #
+  #           echo "Deployment to Prod completed successfully!"
