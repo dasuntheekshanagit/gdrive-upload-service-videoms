@@ -86,7 +86,7 @@ def process_gdrive_upload(video_id: str, request_data: dict):
                 "videoId": video.id,
                 "title": video.original_file_name,
                 "description": video.description,
-                "privacyStatus": "private"
+                "privacyStatus": "unlisted"
             }
             logger.info(f"Triggering YouTube Upload Service at {yt_url} for video {video_id}")
             try:
